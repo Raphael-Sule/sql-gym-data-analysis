@@ -1,0 +1,1 @@
+This project utilizes MySQL to analyze gym-related data sets, focusing on member activities, equipment usage, and overall gym performance. The analysis aims to provide insights into member behavior, operational efficiency, and areas for improvement through structured queries and data transformations.
