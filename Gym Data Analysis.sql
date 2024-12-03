@@ -1,8 +1,9 @@
 /*
 workout data: 
-percentage of each workout across all locations
-descending workout % in each location
-descending gym type % in each location
+percentage of each workout across all locations (query done)
+descending workout % in each location (query done)
+descending gym type % in each location (query done)
+
 
 gym data:
 percentage of each gym type across all locations
@@ -15,12 +16,11 @@ spread of subscription plans in each gym (basic query done)
 spread of subscription plans in each location (query done)
 
 gym data:
-spread of sign-up dates by month
+spread of sign-up dates by month (query done)
 
 PREMIUM, BUDGET, STANDARD:
 	- number of times people attend each type of gym
     
-
 
 user data:
 oldest, youngest and average age in each gym
@@ -49,77 +49,97 @@ ORDER  BY user_id;
 
 -- descending % of each workout across all locations
 WITH workouts_across_locations
-     AS (SELECT workout_type,
-                Count(workout_type) workout_freq
-         FROM   checkin_checkout_history
-         GROUP  BY workout_type
-         ORDER  BY NULL)
-SELECT t2.workout_type,
-        CONCAT(( t2.workout_freq / Count(t1.workout_type) * 100 ), '%') AS percentage_of_total
-FROM   checkin_checkout_history t1,
-       workouts_across_locations t2
-GROUP  BY t2.workout_type
-ORDER  BY NULL;
+     AS (SELECT 
+			workout_type,
+			Count(workout_type) workout_freq
+        FROM 
+			checkin_checkout_history
+        GROUP BY 
+			workout_type
+        ORDER BY 
+			NULL)
+SELECT 
+	wal.workout_type,
+	CONCAT(ROUND((wal.workout_freq / Count(cch.workout_type) * 100 ),2), '%') AS percentage_of_total
+FROM   
+	checkin_checkout_history AS cch,
+	workouts_across_locations AS wal
+GROUP BY 
+	wal.workout_type
+ORDER BY
+	NULL;
 
 -- descending workout % in each location 
 WITH workouts_in_locations
-     AS (SELECT t1.workout_type        workout,
-                t2.location			   location,
-                Count(t1.workout_type) workout_freq
-         FROM   checkin_checkout_history t1
-                JOIN gym_locations_data t2
-                  ON t1.gym_id = t2.gym_id
-         GROUP  BY t1.workout_type,
-                   t2.location
-         ORDER  BY workout)
-SELECT location,
-       workout,
-       workout_freq / Sum(workout_freq)
-                        OVER (
-                          partition BY location) * 100 workout_freq
-FROM   workouts_in_locations
-ORDER  BY location,
-          workout_freq DESC;
+     AS (SELECT 
+			cch.workout_type AS workout,
+            gld.location AS location,
+			Count(cch.workout_type) AS workout_freq
+         FROM   
+			checkin_checkout_history AS cch
+			JOIN gym_locations_data AS gld
+                  ON cch.gym_id = gld.gym_id
+         GROUP BY 
+			cch.workout_type,
+			gld.location
+         ORDER BY 
+			workout
+		)
+SELECT 
+	location,
+	workout,
+	workout_freq / Sum(workout_freq) OVER (
+		PARTITION BY location) * 100 AS workout_freq
+FROM
+	workouts_in_locations
+ORDER BY 
+	location,
+	workout_freq DESC;
 
 -- descending workout % in each gym type
 WITH workouts_by_gym_type
-     AS (SELECT t1.workout_type        workout,
-                t2.gym_type            gym_type,
-                Count(t1.workout_type) workout_freq
-         FROM   checkin_checkout_history t1
-                JOIN gym_locations_data t2
-                  ON t1.gym_id = t2.gym_id
-         GROUP  BY workout,
-                   gym_type
-         ORDER  BY gym_type)
-SELECT gym_type,
-       workout,
-       CONCAT(ROUND((workout_freq / Sum(workouts_by_gym_type.workout_freq)
-                        OVER (
-                          partition BY gym_type) * 100), 2), '%') workout_frequency
-FROM   workouts_by_gym_type
-ORDER  BY gym_type,
-          workout_freq DESC;
+     AS (SELECT 
+			cch.workout_type AS workout,
+			gld.gym_type AS gym_type,
+			Count(cch.workout_type) workout_freq
+         FROM   
+			checkin_checkout_history AS cch
+			JOIN gym_locations_data AS gld
+				ON cch.gym_id = gld.gym_id
+         GROUP BY 
+			workout,
+			gym_type
+         ORDER BY 
+			gym_type)
+SELECT 
+	gym_type,
+	workout,
+	CONCAT(ROUND((workout_freq / Sum(wbgt.workout_freq) OVER (
+		PARTITION BY gym_type) * 100), 2), '%') AS workout_frequency
+FROM
+	workouts_by_gym_type AS wbgt
+ORDER BY 
+	gym_type,
+	workout_freq DESC;
 
+-- create a temp table and query it?
 
 -- 		subscription  data 		--
   
   -- spread of subscription plans in each location
   
-WITH
-  user_gym_counts AS (
-    SELECT
-      gld.location,
-      ud.subscription_plan,
-      COUNT(DISTINCT ud.user_id) AS user_count,
-      COUNT(DISTINCT ud.user_id) * 100.0 / SUM(COUNT(DISTINCT ud.user_id)) OVER (
-        PARTITION BY
-          gld.location
-      ) AS percentage
+WITH user_gym_counts AS (
+     SELECT gld.location,
+     ud.subscription_plan,
+     COUNT(DISTINCT ud.user_id) AS user_count,
+     COUNT(DISTINCT ud.user_id) * 100.0 / SUM(COUNT(DISTINCT ud.user_id)) OVER (
+		PARTITION BY gld.location) AS percentage
     FROM
       users_data AS ud
-      JOIN checkin_checkout_history AS cch ON ud.user_id = cch.user_id
-      JOIN gym_locations_data AS gld ON cch.gym_id = gld.gym_id
+      JOIN checkin_checkout_history AS cch 
+		   ON ud.user_id = cch.user_id
+      JOIN gym_locations_data AS gld 
+		   ON cch.gym_id = gld.gym_id
     GROUP BY
       gld.location,
       ud.subscription_plan
@@ -137,13 +157,14 @@ ORDER BY
   
 -- spread of subscription plans in each gym
 SELECT
-	t2.gym_type,
-	COUNT(t1.user_id) AS attendance_count
+	gld.gym_type,
+	COUNT(cch.user_id) AS attendance_count
 FROM
-	checkin_checkout_history t1
-		JOIN gym_locations_data t2 ON t1.gym_id = t2.gym_id
+	checkin_checkout_history cch
+		JOIN gym_locations_data gld
+			 ON cch.gym_id = gld.gym_id
 GROUP BY
-	t2.gym_type;
+	gld.gym_type;
     
 
 -- 		user data 		--
